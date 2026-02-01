@@ -1,0 +1,3 @@
+"""
+arXiv Paper Collector Package
+"""

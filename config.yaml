@@ -1,0 +1,71 @@
+# arXiv論文日次収集＆翻訳システム 設定ファイル
+
+# 対象arXivカテゴリ（12カテゴリ）
+categories:
+  # AI・機械学習系（7カテゴリ）
+  - cs.AI       # Artificial Intelligence
+  - cs.LG       # Machine Learning
+  - cs.CL       # Computation and Language (NLP)
+  - cs.CV       # Computer Vision
+  - cs.NE       # Neural and Evolutionary Computing
+  - cs.RO       # Robotics
+  - stat.ML     # Statistics - Machine Learning
+  
+  # 物理系（5カテゴリ）
+  - quant-ph        # Quantum Physics
+  - cond-mat.dis-nn # Disordered Systems and Neural Networks
+  - hep-th          # High Energy Physics - Theory
+  - gr-qc           # General Relativity and Quantum Cosmology
+  - physics.comp-ph # Computational Physics
+
+# スクリーニング設定
+screening:
+  # 翻訳対象の上位N件
+  top_n: 100
+  
+  # 有益度スコアの閾値（1-10）
+  min_score: 5
+  
+  # スクリーニング基準（プロンプトに使用）
+  criteria:
+    - 実用性: 実際のアプリケーションに活用できるか
+    - 新規性: 既存研究と比べて新しい知見があるか
+    - 影響度: 分野に大きなインパクトを与えそうか
+    - わかりやすさ: 一般視聴者に説明可能か（YouTubeショート向け）
+
+# Gemini API設定
+gemini:
+  model: gemini-2.5-flash
+  # バッチAPI設定
+  batch:
+    enabled: true
+    max_concurrent: 10
+  # リトライ設定
+  retry:
+    max_attempts: 3
+    backoff_seconds: 2
+
+# arXiv API設定
+arxiv:
+  # リクエスト間隔（秒）- arXiv推奨は3秒以上
+  request_interval: 3
+  # 1回あたりの最大取得件数
+  max_results_per_query: 100
+
+# 出力設定（Google Drive同期フォルダ）
+output:
+  # Google Driveマイドライブ内に直接保存（自動同期）
+  base_dir: "G:/マイドライブ/ArXiv"
+  
+  # サブフォルダ構造
+  subfolders:
+    metadata: metadata
+    screening: screening
+    translated: translated
+    papers: papers
+
+# ロギング設定
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/arxiv_collector.log
