@@ -1,45 +1,40 @@
 # arXiv論文日次収集＆翻訳システム - タスクリスト
 
-## Phase 1: プロジェクト基盤構築
-- [ ] プロジェクトディレクトリ作成
-- [ ] Python仮想環境セットアップ
-- [ ] 依存ライブラリインストール
-- [ ] `.env` ファイル作成（API Keys）
-- [ ] `config.yaml` 作成（カテゴリ、スクリーニング基準）
+## Phase 1-6: 基盤機能 ✅
+- [x] arXiv論文取得・PDFダウンロード
+- [x] AIスクリーニング（研究評価）
+- [x] 翻訳・要約
+- [x] Google Drive同期
+- [x] 統合パイプライン（main.py）
 
-## Phase 2: arXiv取得 + PDF全件ダウンロード
-- [ ] `src/arxiv_client.py` 実装
-  - [ ] 12カテゴリの新着論文取得（全件（目安300本/日））
-  - [ ] 日付フィルタリング（前日分）
-  - [ ] 重複排除
-- [ ] `src/pdf_downloader.py` 実装
-  - [ ] PDF全件ダウンロード（300本/日）
-  - [ ] リトライ処理
+## Phase 7: YouTube Shorts機能 ✅
+- [x] `src/shorts_scorer.py` - Shorts適性スコアリング（6軸100点満点）
+- [x] `src/shorts_writer.py` - 30秒台本生成（6ブロック）
+- [x] 統合CSV（papers_*.csv）にShorts列追加
+- [x] テスト実行完了（1025件→187件候補）
 
-## Phase 3: AIスクリーニング機能
-- [ ] `src/screener.py` 実装
-  - [ ] Gemini バッチAPI接続
-  - [ ] 有益度スコアリング（1-10）
-  - [ ] 上位100本の選定ロジック
-- [ ] スクリーニングプロンプト作成
+## Phase 8: Canva動画量産機能
+- [x] `src/canva_generator.py` - Canva Bulk Create用CSV生成
+- [x] `src/audio_script_generator.py` - 音声ナレーション台本生成
+- [x] `src/shorts_video_generator.py` - 統合モジュール（CSV + VOICEVOX音声）
+- [/] 全件生成（現在10件テスト済み、187件対応待ち）
+- [ ] main.pyへの統合
 
-## Phase 4: Gemini翻訳＆要約機能（バッチAPI）
-- [ ] `src/translator.py` 実装
-  - [ ] Gemini バッチAPI接続（50%オフ）
-  - [ ] タイトル＋Abstract翻訳
-  - [ ] 3行要約生成（YouTubeショート用）
-  - [ ] キーワード抽出
+## Phase 9: MoviePy動画レンダリング ✅
+- [x] `src/moviepy_renderer.py` - MoviePy動画レンダラー
+- [x] shorts_video_generatorへの統合（`enable_moviepy=True`）
+- [x] E2Eテスト完了
 
-## Phase 5: Google Drive連携
-- [ ] Google Cloud Console設定
-- [ ] `src/drive_uploader.py` 実装
-  - [ ] 日付・カテゴリ別フォルダ自動作成
-  - [ ] 全データアップロード（PDF全件＋翻訳＋メタデータ）
+### 将来タスク
+- [ ] 画像テンプレート対応（Canva無料版で背景作成→差替）
+- [ ] Remotion移行検討（リッチアニメーション必要時）
 
-## Phase 6: 統合＆自動化
-- [ ] `main.py` 実装（3段階パイプライン）
-- [ ] エラーハンドリング＆リトライ
-- [ ] ロギング設定
-- [ ] Windows Task Scheduler設定（深夜バッチ）
-- [ ] 動作検証
-- [ ] README.md 作成
+---
+
+## 📅 将来のリマインダー
+
+### 2026-03-01: min_score見直し
+- [ ] `min_score: 65` で1か月運用後、実データを分析
+  - ADOPT_HIGH の平均再生数
+  - ADOPT_MID の"事故バズ"率
+  - 閾値を70に上げるか維持か判断

@@ -24,6 +24,8 @@ from src.arxiv_client import get_papers_by_category, filter_by_date
 from src.pdf_downloader import download_papers
 from src.screener import Screener
 from src.translator import Translator
+from src.shorts_scorer import ShortsScorer
+from src.shorts_writer import ShortsWriter
 
 
 def setup_logging(config: dict) -> logging.Logger:
@@ -249,14 +251,78 @@ def main():
     save_csv(translated, translated_csv_path, translated_columns)
     logger.info(f"翻訳完了: {len(translated)}件（CSV出力済み）")
     
+    # ====== Phase 4: Shorts適性スコアリング ======
+    logger.info("Phase 4: Shorts適性スコアリング開始")
+    
+    shorts_config = config.get("shorts", {})
+    shorts_scorer = ShortsScorer(gemini_api_key, config.get("gemini", {}).get("model", "gemini-2.5-flash"))
+    shorts_scores = shorts_scorer.score_papers(top_papers)
+    
+    # Shortsスコア保存
+    shorts_dir = output_dir / output_config.get("subfolders", {}).get("shorts", "shorts")
+    shorts_scores_path = shorts_dir / f"shorts_scores_{date_str}.json"
+    save_json(shorts_scores, shorts_scores_path)
+    
+    # 動画化候補を抽出
+    shorts_candidates = shorts_scorer.filter_by_verdict(shorts_scores, include_mid=True)
+    logger.info(f"Shorts候補: {len(shorts_candidates)}件 (ADOPT_HIGH + ADOPT_MID)")
+    
+    # ====== Phase 5: Shorts台本生成 ======
+    scripts = []
+    if shorts_candidates:
+        max_scripts = shorts_config.get("max_scripts", 10)
+        target_papers_for_scripts = shorts_candidates[:max_scripts]
+        
+        # paper_idで元の論文情報を取得
+        paper_map = {p.get("id"): p for p in top_papers}
+        papers_for_scripts = [paper_map.get(s.get("paper_id"), {}) for s in target_papers_for_scripts]
+        
+        logger.info(f"Phase 5: Shorts台本生成開始 ({len(papers_for_scripts)}件)")
+        
+        shorts_writer = ShortsWriter(gemini_api_key, config.get("gemini", {}).get("model", "gemini-2.5-flash"))
+        scripts = shorts_writer.generate_scripts(papers_for_scripts, target_papers_for_scripts)
+        
+        # 台本保存
+        scripts_path = shorts_dir / f"scripts_{date_str}.json"
+        save_json(scripts, scripts_path)
+        logger.info(f"Shorts台本生成完了: {len(scripts)}件")
+    else:
+        logger.info("Shorts候補なし: 台本生成スキップ")
+    
+    # ====== 統合CSV更新（Shortsスコア追加） ======
+    shorts_score_map = {s.get("paper_id"): s for s in shorts_scores}
+    for merged in merged_data:
+        paper_id = merged.get("id")
+        ss = shorts_score_map.get(paper_id, {})
+        merged["shorts_score"] = ss.get("total_score", "")
+        merged["shorts_verdict"] = ss.get("verdict", "")
+        merged["shorts_hook"] = ss.get("one_line_hook", "")
+        clickbait = ss.get("clickbait_potential", {})
+        merged["best_title"] = clickbait.get("best_title", "") if isinstance(clickbait, dict) else ""
+    
+    # 統合CSV再出力（Shorts列追加）
+    merged_columns_with_shorts = [
+        "id", "title", "authors", "categories", "published",
+        "total_score", "usefulness", "novelty", "impact", "explainability",
+        "shorts_score", "shorts_verdict", "shorts_hook", "best_title",
+        "one_line_summary", "reason", "abstract", "pdf_url"
+    ]
+    save_csv(merged_data, merged_csv_path, merged_columns_with_shorts)
+    logger.info(f"統合CSV更新: Shortsスコア追加済み")
+    
     # ====== 日次サマリー生成 ======
     summary_md = generate_daily_summary(papers, translated, target_date)
+    
+    # Shorts候補情報をサマリーに追加
+    shorts_summary = f"\n## Shorts候補\n- ADOPT_HIGH + ADOPT_MID: {len(shorts_candidates)}件\n- 台本生成: {len(scripts)}件\n"
+    summary_md += shorts_summary
+    
     summary_path = output_dir / f"summary_{date_str}.md"
     summary_path.write_text(summary_md, encoding="utf-8")
     
     logger.info(f"=== 処理完了: {date_str} ===")
     logger.info(f"  出力先: {output_dir}")
-    logger.info(f"  取得: {len(papers)}件, 翻訳: {len(translated)}件")
+    logger.info(f"  取得: {len(papers)}件, 翻訳: {len(translated)}件, Shorts: {len(shorts_candidates)}件")
     logger.info("  ※ Google Driveへ自動同期されます")
 
 

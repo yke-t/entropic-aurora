@@ -1,124 +1,234 @@
-# arXiv論文日次収集＆翻訳システム - 実装計画
+# YouTube Shorts 台本生成システム - 設計改善案 v2
 
-## 概要
-
-arXivから指定分野（AI/機械学習/量子物理）の新着論文を毎日自動取得し、Gemini APIで日本語翻訳＆要約を行い、Google Driveに保存するシステム。
-
-**ゴール**: Zero-Toil（完全自動化）でYouTubeショート素材＆NotebookLM活用を実現
-
----
-
-## システム構成
-
-```
-📦 C:\Users\yke\Projects\entropic-aurora\
-├── 📄 main.py                    # エントリーポイント（3段階パイプライン）
-├── 📄 config.yaml                # 設定（カテゴリ、スクリーニング基準）
-├── 📄 .env                       # API Keys（Git管理外）
-├── 📄 requirements.txt
-├── 📁 src/
-│   ├── arxiv_client.py           # arXiv API取得
-│   ├── pdf_downloader.py         # ⭐ PDF取得（全件300本）
-│   ├── screener.py               # AIスクリーニング（翻訳対象選定）
-│   ├── translator.py             # Gemini翻訳＋要約（バッチAPI）
-│   ├── drive_uploader.py         # Google Drive連携
-│   └── output.py                 # 出力処理
-└── 📁 output/
-```
+> **レビューフィードバック反映版**
+> - weights優先順位をShorts特化に変更
+> - 第6軸「life_impact」追加
+> - clickbait判定を「強制タイトル生成→採点」方式に変更
+> - CTAを「余韻」に変更
+> - min_scoreを65に変更
 
 ---
 
-## 技術スタック
-
-| コンポーネント | 技術 | 理由 |
-|--------------|------|------|
-| 言語 | Python 3.11+ | AI/MLライブラリ充実 |
-| arXiv取得 | `arxiv` ライブラリ | 公式推奨 |
-| スクリーニング＆翻訳 | **Gemini 2.5 Flash バッチAPI** | **50%オフ** |
-| PDF保存 | Google Drive API | NotebookLM連携 |
-| 日次実行 | Windows Task Scheduler | Zero-Toil |
-
----
-
-## 選択済みカテゴリ（確定・12カテゴリ）
-
-### 🤖 AI・機械学習系（7カテゴリ）
-`cs.AI`, `cs.LG`, `cs.CL`, `cs.CV`, `cs.NE`, `cs.RO`, `stat.ML`
-
-### ⚛️ 物理系（5カテゴリ）
-`quant-ph`, `cond-mat.dis-nn`, `hep-th`, `gr-qc`, `physics.comp-ph`
-
----
-
-## データフロー（3段階パイプライン）
+## 新パイプライン設計
 
 ```mermaid
 flowchart LR
-    A[arXiv API] --> B[メタデータ + PDF全件<br>目安300本/日]
-    B --> C[AIスクリーニング<br>有益度スコア]
-    C -->|上位100本| D[翻訳＋要約]
-    C -->|全件| E[Google Drive保存]
-    D --> F[日次サマリー]
-```
-
-### 処理タイムライン
-```
-🌙 深夜2:00  → メタデータ取得 + PDF全件ダウンロード
-🌙 深夜3:00  → スクリーニング + 翻訳バッチ投入
-☀️ 朝7:00   → 結果取得完了
-📊 朝7:30   → Drive保存 + サマリー生成
+    A[arXiv取得] --> B[Phase 2: 研究スクリーニング]
+    B --> C[Phase 3: Shorts適性スコアリング]
+    C -->|65点以上| D[Phase 4: Shorts台本生成]
+    C -->|65点未満| E[スキップ]
+    D --> F[保存・Drive同期]
 ```
 
 ---
 
-## Google Drive フォルダ構造（全データ保存）
+## 1. 評価基準（100点満点）- Shorts特化版
+
+### 🔥 優先順位（再生数ベース）
 
 ```
-📁 ArXiv/
-├── 📁 2025-01/
-│   ├── 📁 metadata/              # 全メタデータ
-│   ├── 📁 screening/             # スクリーニング結果
-│   ├── 📁 translated/            # 翻訳結果（上位100本/日）
-│   ├── 📁 papers/                # PDF全件
-│   └── 📄 summary_*.md           # 日次サマリー
-└── 📁 2025-02/
+① clickbait_potential  25点  ← 「止まるか」が最優先
+② life_impact          20点  ← 仕事・生活への脅威
+③ human_comparison     20点  ← 人間 vs AI
+④ strong_numbers       15点  ← 数字インパクト
+⑤ use_case            10点  ← 用途の具体性
+⑥ implementation      10点  ← 実装現実性
+─────────────────────────────
+合計                  100点
 ```
 
 ---
 
-## コスト試算（月額）
+## 2. Shorts適性スコアリング プロンプト
 
-| Phase | 処理内容 | 月額 |
-|-------|---------|------|
-| 1 | メタデータ + PDF全件取得 | 無料 |
-| 2 | AIスクリーニング | $1.5 |
-| 3 | 翻訳（上位100本） | $4.8 |
-| **Gemini API合計（バッチAPI 50%オフ）** | | **$6.3/月** |
-| **PDFストレージ（目安300本×2MB×30日）** | | **約18GB/月** |
+### `src/shorts_scorer.py`
 
-| 項目 | 月額 |
-|------|------|
-| Google AI Pro | $19.99 |
-| Gemini API | $6.3 |
-| クレジット相殺 | -$10 |
-| **実質合計** | **約$16/月** |
+```python
+SHORTS_SCORING_PROMPT = """
+あなたはYouTube Shortsの編集者です。
+以下の論文が「30秒Shorts」として再生されやすいか評価してください。
+
+## 評価基準（100点満点）
+
+### 1. 煽りタイトル変換可能性 (最大25点) 【最重要】
+まず、以下の形式でタイトルを3案作成してください：
+- 「◯◯が終わる」形式
+- 「人間不要」「もう◯◯しなくていい」形式
+- その他インパクト形式
+
+その上で評価：
+- 嘘にならず強いタイトルが作れる: 25点
+- 作れるが少し誇張が必要: 15点
+- 正直に作ると弱い: 5点
+- 煽れない: 0点
+
+### 2. 人生・仕事への影響度 (最大20点)
+この研究が普及した場合、一般人の仕事・判断・生活に直接影響があるか？
+- 仕事がなくなる/大きく変わる: 20点
+- 生活に影響: 12点
+- 専門家のみ影響: 5点
+- 影響なし: 0点
+
+### 3. 人間・専門家との比較 (最大20点)
+"human", "expert", "doctor", "professional" との比較実験があるか
+- 人間を上回る結果あり: 20点
+- 比較実験あり: 12点
+- 言及のみ: 5点
+- なし: 0点
+
+### 4. 数字インパクト (最大15点)
+精度90%+、速度10倍+、コスト50%減など
+- 衝撃的な数字あり: 15点
+- 良い数字あり: 8点
+- 普通/なし: 0点
+
+### 5. 用途の具体性 (最大10点)
+医療、法律、教育、プログラミングなど明確な分野
+- 生活に近い分野: 10点
+- 専門分野: 5点
+- 抽象的: 0点
+
+### 6. 実装の現実性 (最大10点)
+- 今すぐ使える: 10点
+- 近い将来: 5点
+- 遠い/研究段階: 0点
+
+## 論文情報
+タイトル: {title}
+アブストラクト: {abstract}
+
+## 出力形式（JSON）
+{{
+    "clickbait_potential": {{
+        "score": <0-25>,
+        "generated_titles": ["タイトル案1", "タイトル案2", "タイトル案3"],
+        "best_title": "<最も使えるタイトル>",
+        "is_honest": true/false
+    }},
+    "life_impact": {{"score": <0-20>, "affected_jobs": ["職種1", ...], "reason": "..."}},
+    "human_comparison": {{"score": <0-20>, "found_keywords": [...], "evidence": "..."}},
+    "strong_numbers": {{"score": <0-15>, "numbers": ["95%", ...], "evidence": "..."}},
+    "use_case": {{"score": <0-10>, "domains": ["医療", ...]}},
+    "implementation": {{"score": <0-10>, "availability": "open-source/API/未公開"}},
+    "total_score": <合計点>,
+    "verdict": "ADOPT_HIGH" / "ADOPT_MID" / "SKIP",
+    "one_line_hook": "<Shorts冒頭の一言（15字以内）>"
+}}
+
+### verdict 判定ロジック
+
+```python
+def judge_verdict(total_score: int) -> str:
+    if total_score >= 80:
+        return "ADOPT_HIGH"   # 高品質候補
+    elif total_score >= 65:
+        return "ADOPT_MID"    # 動画化対象
+    else:
+        return "SKIP"         # スキップ
+```
+
+※ Geminiにはverdictの計算をさせず、total_scoreからPython側で判定
+"""
+```
 
 ---
 
-## 実装優先順位
+## 3. Shorts 30秒台本プロンプト
 
-1. **MVP**: arXiv取得 → コンソール出力
-2. **スクリーニング**: Geminiで有益論文選定
-3. **翻訳**: バッチAPIで100本翻訳
-4. **Drive連携**: PDF＆サマリー保存
-5. **自動化**: Task Scheduler設定
+### `src/shorts_writer.py`
+
+```python
+SHORTS_SCRIPT_PROMPT = """
+あなたはYouTube Shortsの人気クリエイターです。
+以下の論文を30秒のShorts台本に変換してください。
+
+## 構成ルール（6ブロック・各5秒）
+
+### ブロック1: フック（0-5秒）
+- 視聴者が「え？」と思う一言
+- 例: 「もう医者いらないかも」「プログラマー、終わりです」
+
+### ブロック2: 問題提起（5-10秒）
+- 現状の課題や常識を提示
+- 例: 「今までCTスキャンの読影は医師が何時間もかけてた」
+
+### ブロック3: 解決策（10-15秒）
+- このAI/技術が何をするか
+- 例: 「このAIは3秒で診断、しかも精度95%」
+
+### ブロック4: 証拠（15-20秒）
+- 数字やデータで裏付け
+- 例: 「専門医と比較して、なんと上回る正答率」
+
+### ブロック5: 影響（20-25秒）
+- これが広まるとどうなるか
+- 例: 「途上国の医療格差が一気に解消されるかも」
+
+### ブロック6: 余韻（25-30秒）【変更】
+- 断定や不安を残す一言
+- 例: 「これ、もう止まらない」「気づいた時には遅いかも」
+- ※フォロー誘導はしない（概要欄・固定コメントで対応）
+
+## 論文情報
+タイトル: {title}
+アブストラクト: {abstract}
+Shortsスコア: {shorts_score}
+煽りタイトル: {best_title}
+
+## 出力形式（JSON）
+{{
+    "video_title": "<YouTube動画タイトル（40字以内）>",
+    "thumbnail_text": "<サムネイル用テキスト（10字以内）>",
+    "blocks": [
+        {{"block": 1, "type": "フック", "script": "...", "visual_note": "..."}},
+        {{"block": 2, "type": "問題提起", "script": "...", "visual_note": "..."}},
+        {{"block": 3, "type": "解決策", "script": "...", "visual_note": "..."}},
+        {{"block": 4, "type": "証拠", "script": "...", "visual_note": "..."}},
+        {{"block": 5, "type": "影響", "script": "...", "visual_note": "..."}},
+        {{"block": 6, "type": "余韻", "script": "...", "visual_note": "..."}}
+    ],
+    "full_script": "<全文ナレーション>",
+    "hashtags": ["#AI", "#論文解説", ...]
+}}
+"""
+```
 
 ---
 
-## リスクと対策
+## 4. 統合CSV設計（papers_*.csv）
 
-| リスク | 対策 |
-|--------|------|
-| arXiv API制限 | リクエスト間隔を3秒以上空ける |
-| Gemini API障害 | リトライ処理（指数バックオフ） |
-| 認証期限切れ | サービスアカウント使用（長期有効） |
+| グループ | 列 |
+|---------|-----|
+| 基本情報 | id, title, authors, categories, published |
+| 研究スコア | total_score, usefulness, novelty, impact, explainability |
+| **Shortsスコア** | shorts_score, clickbait, life_impact, human, numbers, use_case, impl |
+| **生成結果** | verdict, best_title, one_line_hook |
+| その他 | abstract, pdf_url |
+
+---
+
+## 5. config.yaml
+
+```yaml
+shorts:
+  min_score: 65        # 初期値：多めに回す
+  max_scripts: 10
+  weights:
+    clickbait_potential: 25
+    life_impact: 20
+    human_comparison: 20
+    strong_numbers: 15
+    use_case: 10
+    implementation: 10
+```
+
+---
+
+## 6. 実装優先順位
+
+| 優先度 | タスク | 工数 |
+|-------|--------|-----|
+| 🔴 P0 | `shorts_scorer.py` 実装 | 1h |
+| 🔴 P0 | `shorts_writer.py` 実装 | 1h |
+| 🟡 P1 | `main.py` Phase 3-4追加 | 30m |
+| 🟢 P2 | テスト・閾値調整 | 30m |

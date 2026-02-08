@@ -63,6 +63,25 @@ output:
     screening: screening
     translated: translated
     papers: papers
+    shorts: shorts
+
+# YouTube Shorts生成設定
+shorts:
+  # Shorts適性スコア閾値（100点満点）
+  # 初期値65で多めに回す → 2026-03-01に見直し
+  min_score: 65
+  
+  # 台本生成対象の上限件数
+  max_scripts: 10
+  
+  # 評価基準の重み（合計100）
+  weights:
+    clickbait_potential: 25   # 煽りタイトル変換（最優先）
+    life_impact: 20           # 人生・仕事への影響
+    human_comparison: 20      # 人間との比較
+    strong_numbers: 15        # 数字インパクト
+    use_case: 10              # 用途具体性
+    implementation: 10        # 実装現実性
 
 # ロギング設定
 logging:
