@@ -290,31 +290,3 @@ class MoviePyRenderer:
                 results["failed"] += 1
         
         return results
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    
-    # テスト
-    renderer = MoviePyRenderer(
-        output_dir=Path("output"),
-        resolution=(1080, 1920),
-        fps=30
-    )
-    
-    test_texts = {
-        "hook": "医者が不要になる",
-        "line1": "AIが専門医を超えた診断精度を達成",
-        "line2": "肺がん検出で人間の95%を上回る99%を記録",
-        "ending": "もう戻れない"
-    }
-    
-    result = renderer.render_video(
-        texts=test_texts,
-        output_path=Path("output/test_video.mp4")
-    )
-    
-    if result:
-        print(f"[OK] Video created: {result}")
-    else:
-        print("[FAIL] Video creation failed")

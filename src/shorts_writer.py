@@ -165,36 +165,3 @@ class ShortsWriter:
                 time.sleep(delay_seconds)
         
         return results
-
-
-if __name__ == "__main__":
-    import os
-    from dotenv import load_dotenv
-    
-    load_dotenv()
-    logging.basicConfig(level=logging.INFO)
-    
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("GEMINI_API_KEY not set in .env")
-        exit(1)
-    
-    writer = ShortsWriter(api_key)
-    
-    test_paper = {
-        "id": "test001",
-        "title": "GPT-4 Outperforms Human Doctors in Medical Diagnosis",
-        "abstract": "We show that GPT-4 achieves 95% accuracy in diagnosing diseases from medical images, surpassing expert radiologists who achieved 87% accuracy."
-    }
-    
-    test_score = {
-        "paper_id": "test001",
-        "total_score": 85,
-        "verdict": "ADOPT_HIGH",
-        "clickbait_potential": {
-            "best_title": "医者が不要になる日が来た"
-        }
-    }
-    
-    result = writer.generate_script(test_paper, test_score)
-    print(json.dumps(result, ensure_ascii=False, indent=2))

@@ -360,33 +360,3 @@ class ShortsVideoGenerator:
                 writer.writerow(row)
         
         self.logger.info(f"CSV保存: {output_path} ({len(valid_results)}件)")
-
-
-if __name__ == "__main__":
-    from dotenv import load_dotenv
-    
-    load_dotenv()
-    logging.basicConfig(level=logging.INFO)
-    
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("GEMINI_API_KEY not set")
-        exit(1)
-    
-    generator = ShortsVideoGenerator(api_key)
-    
-    # テスト
-    test_paper = {
-        "id": "test001",
-        "title": "GPT-4 Outperforms Human Doctors in Medical Diagnosis",
-        "abstract": "We show that GPT-4 achieves 95% accuracy in diagnosing diseases."
-    }
-    test_score = {
-        "paper_id": "test001",
-        "total_score": 85,
-        "verdict": "ADOPT_HIGH",
-        "clickbait_potential": {"best_title": "医者が不要になる"}
-    }
-    
-    result = generator.generate_canva_text(test_paper, test_score)
-    print(json.dumps(result, ensure_ascii=False, indent=2))

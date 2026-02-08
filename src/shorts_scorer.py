@@ -206,27 +206,3 @@ class ShortsScorer:
             valid_verdicts = ("ADOPT_HIGH",)
         
         return [s for s in scores if s.get("verdict") in valid_verdicts]
-
-
-if __name__ == "__main__":
-    import os
-    from dotenv import load_dotenv
-    
-    load_dotenv()
-    logging.basicConfig(level=logging.INFO)
-    
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("GEMINI_API_KEY not set in .env")
-        exit(1)
-    
-    scorer = ShortsScorer(api_key)
-    
-    test_paper = {
-        "id": "test001",
-        "title": "GPT-4 Outperforms Human Doctors in Medical Diagnosis",
-        "abstract": "We show that GPT-4 achieves 95% accuracy in diagnosing diseases from medical images, surpassing expert radiologists who achieved 87% accuracy. The model is freely available as an API."
-    }
-    
-    result = scorer.score_paper(test_paper)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
